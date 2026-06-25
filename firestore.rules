@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Lock down everything by default.
+    // Since this is a secure full-stack application, all database queries and mutations
+    // are proxied through our Node.js Express backend using the privileged firebase-admin SDK.
+    // This completely prevents client-side direct scraping or wallet drain attacks.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

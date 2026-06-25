@@ -1,0 +1,6 @@
+{
+  "name": "نظام الاستعلام عن الشهادات والدفع الإلكتروني",
+  "description": "نظام إلكتروني آمن للاستعلام عن الشهادات الدراسية والدفع عبر بوابة كاشير وتحميل الشهادات مع التحقق عبر الـ QR Code لوحة تحكم الإدارة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
