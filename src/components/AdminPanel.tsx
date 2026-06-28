@@ -5,6 +5,7 @@ import {
   Settings, Key, Globe, Lock
 } from 'lucide-react';
 import { Student, Payment, AdminStats } from '../types';
+import { getApiUrl } from '../config';
 
 interface AdminPanelProps {
   onBackToSearch: () => void;
@@ -142,7 +143,7 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch(getApiUrl('/api/admin/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -165,7 +166,7 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/logout', {
+      await fetch(getApiUrl('/api/admin/logout'), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -187,7 +188,7 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // Fetch Stats
-      const statsRes = await fetch('/api/admin/stats', { headers });
+      const statsRes = await fetch(getApiUrl('/api/admin/stats'), { headers });
       const statsData = await statsRes.json();
       if (statsRes.status === 401 || statsRes.status === 403) {
         handleLogout();
@@ -196,17 +197,17 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
       setStats(statsData);
 
       // Fetch Students
-      const studentsRes = await fetch('/api/admin/students', { headers });
+      const studentsRes = await fetch(getApiUrl('/api/admin/students'), { headers });
       const studentsData = await studentsRes.json();
       setStudents(studentsData.students);
 
       // Fetch Payments
-      const paymentsRes = await fetch('/api/admin/payments', { headers });
+      const paymentsRes = await fetch(getApiUrl('/api/admin/payments'), { headers });
       const paymentsData = await paymentsRes.json();
       setPayments(paymentsData.payments);
 
       // Fetch Gateway Config
-      const gatewayRes = await fetch('/api/admin/gateway-config', { headers });
+      const gatewayRes = await fetch(getApiUrl('/api/admin/gateway-config'), { headers });
       if (gatewayRes.ok) {
         const gatewayData = await gatewayRes.json();
         const cfg = gatewayData.gatewayConfig;
@@ -232,7 +233,7 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
     }
     setGatewaySaving(true);
     try {
-      const response = await fetch('/api/admin/gateway-config', {
+      const response = await fetch(getApiUrl('/api/admin/gateway-config'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -345,8 +346,8 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
 
     try {
       const url = editingStudent 
-        ? `/api/admin/students/${editingStudent.id}` 
-        : '/api/admin/students';
+        ? getApiUrl(`/api/admin/students/${editingStudent.id}`) 
+        : getApiUrl('/api/admin/students');
       
       const method = editingStudent ? 'PUT' : 'POST';
 
@@ -378,7 +379,7 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
     }
 
     try {
-      const response = await fetch(`/api/admin/students/${id}`, {
+      const response = await fetch(getApiUrl(`/api/admin/students/${id}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -397,7 +398,7 @@ export default function AdminPanel({ onBackToSearch }: AdminPanelProps) {
 
   const handleReissueCert = async (id: string) => {
     try {
-      const response = await fetch(`/api/admin/students/${id}/reissue`, {
+      const response = await fetch(getApiUrl(`/api/admin/students/${id}/reissue`), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });

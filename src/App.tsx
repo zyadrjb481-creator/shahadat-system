@@ -6,6 +6,7 @@ import PaymentGateway from './components/PaymentGateway';
 import CertificateVerify from './components/CertificateVerify';
 import AdminPanel from './components/AdminPanel';
 import { Student } from './types';
+import { getApiUrl } from './config';
 
 type AppView = 'search' | 'certificate' | 'gateway' | 'verify' | 'admin';
 
@@ -41,7 +42,7 @@ export default function App() {
 
   const handleKashierCallbackSuccess = async (merchantOrderId: string, paymentStatus: string, signature: string) => {
     try {
-      const response = await fetch('/api/payments/kashier-callback', {
+      const response = await fetch(getApiUrl('/api/payments/kashier-callback'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -135,12 +136,12 @@ export default function App() {
   const handlePaymentVerification = async (transactionId: string) => {
     try {
       // Direct inquiry to server DB instead of frontend query param!
-      const response = await fetch(`/api/payments/verify?transactionId=${encodeURIComponent(transactionId)}`);
+      const response = await fetch(getApiUrl(`/api/payments/verify?transactionId=${encodeURIComponent(transactionId)}`));
       const data = await response.json();
       
       if (response.ok && data.status === 'success' && data.studentId) {
         // Fetch student again - now updated to PAID
-        const studentRes = await fetch(`/api/student/search?query=${encodeURIComponent(data.studentId)}`);
+        const studentRes = await fetch(getApiUrl(`/api/student/search?query=${encodeURIComponent(data.studentId)}`));
         const studentData = await studentRes.json();
         
         if (studentRes.ok) {
@@ -239,7 +240,7 @@ export default function App() {
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
               </div>
               <div className="text-right">
-                <span className="block font-black text-xs text-emerald-300 tracking-wide uppercase">معهد عبد الفتاح عزام بنين</span>
+                <span className="block font-black text-xs text-emerald-300 tracking-wide uppercase">وزارة التربية والتعليم والتعليم الفني</span>
                 <span className="block font-bold text-sm tracking-tight">نظام الاستعلام الرقمي والتوثيق المعتمد</span>
               </div>
             </div>
@@ -268,6 +269,7 @@ export default function App() {
               setVerifyHash(hash);
               setView('verify');
             }}
+            onNavigateToAdmin={() => setView('admin')}
           />
         )}
 
@@ -322,7 +324,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="text-right space-y-1">
               <span className="font-bold text-slate-200 block">نظام توثيق وحماية الشهادات القومي</span>
-              <span>جميع الحقوق محفوظة © معهد عبد الفتاح عزام بنين - جمهورية مصر العربية 2026</span>
+              <span>جميع الحقوق محفوظة © وزارة التربية والتعليم والتعليم الفني - جمهورية مصر العربية 2026</span>
             </div>
             <div className="flex gap-4 text-[10px] text-slate-500 font-medium">
               <span className="flex items-center gap-1">

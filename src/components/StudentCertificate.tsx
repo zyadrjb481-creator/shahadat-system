@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, CreditCard, Lock, Download, Printer, ShieldCheck, CheckCircle2, QrCode, Smartphone } from 'lucide-react';
 import { Student } from '../types';
+import { getApiUrl } from '../config';
 
 interface StudentCertificateProps {
   student: Student;
@@ -18,7 +19,7 @@ export default function StudentCertificate({ student, onBack, onPayRedirect }: S
     setError(null);
 
     try {
-      const response = await fetch('/api/payments/initialize', {
+      const response = await fetch(getApiUrl('/api/payments/initialize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -196,7 +197,7 @@ export default function StudentCertificate({ student, onBack, onPayRedirect }: S
             <div className="flex justify-between items-start border-b-2 border-emerald-800 pb-6 mb-8 text-sm text-gray-800">
               <div className="text-right space-y-1">
                 <span className="block font-bold text-base text-gray-900">جمهورية مصر العربية</span>
-                <span className="block">معهد عبد الفتاح عزام بنين</span>
+                <span className="block">وزارة التربية والتعليم والتعليم الفني</span>
                 <span className="block">الإدارة العامة للامتحانات</span>
                 <span className="block font-medium">{student.school_name}</span>
               </div>
@@ -213,7 +214,7 @@ export default function StudentCertificate({ student, onBack, onPayRedirect }: S
                 شهادة نجاح وتوثيق دائم
               </span>
               <p className="text-gray-700 leading-relaxed max-w-2xl mx-auto text-base">
-                يشهد معهد عبد الفتاح عزام بنين بأن الطالب / <strong className="text-lg font-bold text-gray-950 underline decoration-emerald-600 underline-offset-4">{student.full_name}</strong>
+                تشهد وزارة التربية والتعليم بأن الطالب / <strong className="text-lg font-bold text-gray-950 underline decoration-emerald-600 underline-offset-4">{student.full_name}</strong>
               </p>
               <p className="text-gray-700 leading-relaxed text-sm">
                 صاحب الرقم القومي <strong className="font-mono text-gray-900 font-bold bg-slate-100 px-2 py-0.5 rounded">{student.national_id}</strong> ورقم الجلوس <strong className="font-mono text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded">{student.seat_number}</strong>
@@ -303,7 +304,7 @@ export default function StudentCertificate({ student, onBack, onPayRedirect }: S
                 </span>
                 <div className="w-20 h-20 rounded-full border-4 border-emerald-800/20 bg-emerald-50 flex items-center justify-center mx-auto relative rotate-12">
                   <div className="absolute inset-2 rounded-full border border-dashed border-emerald-800 flex items-center justify-center text-[10px] text-emerald-800 font-black tracking-tighter text-center">
-                    معهد عبد الفتاح<br />عزام بنين
+                    وزارة التربية<br />والتعليم
                   </div>
                 </div>
                 <span className="block text-xs font-bold text-gray-900 underline decoration-emerald-800 decoration-wavy">

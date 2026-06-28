@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Search, Hash, IdCard, ShieldCheck, CreditCard, Lock, Sparkles } from 'lucide-react';
 import { Student } from '../types';
+import { getApiUrl } from '../config';
 
 interface StudentSearchProps {
   onSearchResult: (student: Student) => void;
   onNavigateToVerify: (hash: string) => void;
+  onNavigateToAdmin: () => void;
 }
 
-export default function StudentSearch({ onSearchResult, onNavigateToVerify }: StudentSearchProps) {
+export default function StudentSearch({ onSearchResult, onNavigateToVerify, onNavigateToAdmin }: StudentSearchProps) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export default function StudentSearch({ onSearchResult, onNavigateToVerify }: St
     setError(null);
 
     try {
-      const response = await fetch(`/api/student/search?query=${encodeURIComponent(query.trim())}`);
+      const response = await fetch(getApiUrl(`/api/student/search?query=${encodeURIComponent(query.trim())}`));
       const data = await response.json();
 
       if (!response.ok) {
@@ -110,7 +112,16 @@ export default function StudentSearch({ onSearchResult, onNavigateToVerify }: St
           </button>
         </form>
 
-
+        <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-4 items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-emerald-600" />
+            <span>نظام دفع إلكتروني مؤمن بالكامل (SSL/HTTPS)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-600" />
+            <span>متاح البحث السريع برقم الجلوس 1001، 1002، 1003</span>
+          </div>
+        </div>
       </div>
 
       {/* Guide & Safety Information */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, CreditCard, Lock, ArrowLeft, Smartphone, Check, Loader2, Sparkles, Building2 } from 'lucide-react';
+import { getApiUrl } from '../config';
 
 interface PaymentGatewayProps {
   transactionId: string;
@@ -43,7 +44,7 @@ export default function PaymentGateway({ transactionId, amount, signature, mode 
       // SECURITY ENFORCEMENT DEMO:
       // We send a mock secure callback to the backend server's Webhook (simulating Cashier's server-to-server Webhook).
       // The server will verify the HMAC signature to ensure it's not a spoof.
-      const response = await fetch('/api/payments/webhook', {
+      const response = await fetch(getApiUrl('/api/payments/webhook'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

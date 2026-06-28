@@ -2,16 +2,32 @@ import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { dbManager, Student, Payment, GatewayConfig, seedDatabaseIfEmpty } from './server/db';
+import { dbManager, Student, Payment, GatewayConfig } from './server/db';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { doc, getDoc } from 'firebase/firestore';
+import { db, autoSeedAdminIfNeeded } from './server/firebase';
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
+// CORS middleware to support separate frontend (Vercel) and backend (Render)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
 // Helper to sign transactions (HMAC-SHA256) for the Simulator
-async function generateSignature(transactionId: string, amount: number): Promise<string> {
-  const config = await dbManager.getGatewayConfig();
+function generateSignature(transactionId: string, amount: number): string {
+  const config = dbManager.getGatewayConfig();
   return crypto
     .createHmac('sha256', config.apiSecret)
     .update(`${transactionId}:${amount}`)
@@ -27,10 +43,14 @@ function generateKashierHash(merchantOrderId: string, amount: number, merchantId
     .digest('hex');
 }
 
-// Admin Sessions (simple, robust, stateful token storage mapping session token to username)
-const ADMIN_SESSIONS = new Map<string, string>();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secure-jwt-secret-key-123456';
 
-// Admin Auth Middleware
+interface DecodedToken {
+  username: string;
+  role: string;
+}
+
+// Admin Auth Middleware (Secured using stateless JWT)
 const verifyAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -38,13 +58,13 @@ const verifyAdmin = (req: express.Request, res: express.Response, next: express.
     return;
   }
   const token = authHeader.split(' ')[1];
-  if (!ADMIN_SESSIONS.has(token)) {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
+    (req as any).admin = decoded;
+    next();
+  } catch (err) {
     res.status(403).json({ error: 'جلسة عمل منتهية الصلاحية أو غير صالحة' });
-    return;
   }
-  // Store username on request object for downstream use if needed
-  (req as any).adminUsername = ADMIN_SESSIONS.get(token);
-  next();
 };
 
 // ==========================================
@@ -52,14 +72,14 @@ const verifyAdmin = (req: express.Request, res: express.Response, next: express.
 // ==========================================
 
 // Search for a student by Seat Number or National ID
-app.get('/api/student/search', async (req, res) => {
+app.get('/api/student/search', (req, res) => {
   const query = req.query.query as string;
   if (!query) {
     res.status(400).json({ error: 'الرجاء إدخال رقم الجلوس أو الرقم القومي' });
     return;
   }
 
-  const student = await dbManager.getStudentBySeatOrNationalId(query);
+  const student = dbManager.getStudentBySeatOrNationalId(query);
   if (!student) {
     res.status(404).json({ error: 'عذراً، لم يتم العثور على طالب بهذا الرقم' });
     return;
@@ -91,9 +111,9 @@ app.get('/api/student/search', async (req, res) => {
 });
 
 // Verification API (Accessed via QR Code scans or manual code lookup)
-app.get('/api/student/verify/:hash', async (req, res) => {
+app.get('/api/student/verify/:hash', (req, res) => {
   const { hash } = req.params;
-  const students = await dbManager.getStudents();
+  const students = dbManager.getStudents();
   const student = students.find(s => s.certificate_hash === hash && s.is_paid);
 
   if (!student) {
@@ -121,14 +141,14 @@ app.get('/api/student/verify/:hash', async (req, res) => {
 // ==========================================
 
 // Initialize a payment transaction for a student
-app.post('/api/payments/initialize', async (req, res) => {
+app.post('/api/payments/initialize', (req, res) => {
   const { studentId, paymentMethod } = req.body;
   if (!studentId) {
     res.status(400).json({ error: 'معرّف الطالب مطلوب لبدء الدفع' });
     return;
   }
 
-  const student = await dbManager.getStudentById(studentId);
+  const student = dbManager.getStudentById(studentId);
   if (!student) {
     res.status(404).json({ error: 'لم يتم العثور على الطالب' });
     return;
@@ -141,18 +161,18 @@ app.post('/api/payments/initialize', async (req, res) => {
 
   const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const amount = student.price;
-  const config = await dbManager.getGatewayConfig();
+  const config = dbManager.getGatewayConfig();
 
   // Generate appropriate cryptographic signature based on mode
   let signature = '';
   if (config.mode === 'simulator') {
-    signature = await generateSignature(transactionId, amount);
+    signature = generateSignature(transactionId, amount);
   } else {
     signature = generateKashierHash(transactionId, amount, config.merchantId, config.apiSecret);
   }
 
   // Store PENDING transaction in DB
-  await dbManager.addPayment({
+  dbManager.addPayment({
     student_id: studentId,
     amount,
     transaction_id: transactionId,
@@ -174,7 +194,7 @@ app.post('/api/payments/initialize', async (req, res) => {
 });
 
 // Server-Side Webhook (Receives both Simulated & Real Kashier callbacks)
-app.post('/api/payments/webhook', async (req, res) => {
+app.post('/api/payments/webhook', (req, res) => {
   const { transactionId, amount, status, signature } = req.body;
 
   if (!transactionId || amount === undefined || !status || !signature) {
@@ -182,23 +202,23 @@ app.post('/api/payments/webhook', async (req, res) => {
     return;
   }
 
-  const config = await dbManager.getGatewayConfig();
+  const config = dbManager.getGatewayConfig();
 
   // Secure validation: Check the HMAC signature to make sure Cashier or simulator actually signed this request
   let expectedSignature = '';
   if (config.mode === 'simulator') {
-    expectedSignature = await generateSignature(transactionId, Number(amount));
+    expectedSignature = generateSignature(transactionId, Number(amount));
   } else {
     expectedSignature = generateKashierHash(transactionId, Number(amount), config.merchantId, config.apiSecret);
   }
 
   // Accept either simulator signature or real Kashier signature for safe fallback
-  if (signature !== expectedSignature && signature !== await generateSignature(transactionId, Number(amount))) {
+  if (signature !== expectedSignature && signature !== generateSignature(transactionId, Number(amount))) {
     res.status(403).json({ error: 'توقيع التحقق غير صالح - فشل التأمين' });
     return;
   }
 
-  const payment = await dbManager.getPaymentByTransactionId(transactionId);
+  const payment = dbManager.getPaymentByTransactionId(transactionId);
   if (!payment) {
     res.status(404).json({ error: 'العملية غير موجودة بالنظام' });
     return;
@@ -211,20 +231,20 @@ app.post('/api/payments/webhook', async (req, res) => {
   }
 
   // Update payment status inside database
-  await dbManager.updatePayment(payment.id, {
+  dbManager.updatePayment(payment.id, {
     status: status === 'success' ? 'success' : 'failed'
   });
 
   // Activate Certificate download if success
   if (status === 'success') {
-    await dbManager.updateStudent(payment.student_id, { is_paid: true });
+    dbManager.updateStudent(payment.student_id, { is_paid: true });
   }
 
   res.json({ success: true, verified: true });
 });
 
 // Kashier Redirect Callback Endpoint
-app.post('/api/payments/kashier-callback', async (req, res) => {
+app.post('/api/payments/kashier-callback', (req, res) => {
   const { merchantOrderId, paymentStatus, signature } = req.body;
   
   if (!merchantOrderId) {
@@ -232,7 +252,7 @@ app.post('/api/payments/kashier-callback', async (req, res) => {
     return;
   }
 
-  const payment = await dbManager.getPaymentByTransactionId(merchantOrderId);
+  const payment = dbManager.getPaymentByTransactionId(merchantOrderId);
   if (!payment) {
     res.status(404).json({ error: 'العملية غير مسجلة' });
     return;
@@ -242,29 +262,29 @@ app.post('/api/payments/kashier-callback', async (req, res) => {
   const statusStr = success ? 'success' : 'failed';
 
   // Update payment status inside database
-  await dbManager.updatePayment(payment.id, {
+  dbManager.updatePayment(payment.id, {
     status: statusStr
   });
 
   // Activate Certificate download if success
   if (success) {
-    await dbManager.updateStudent(payment.student_id, { is_paid: true });
+    dbManager.updateStudent(payment.student_id, { is_paid: true });
   }
 
-  const student = await dbManager.getStudentById(payment.student_id);
+  const student = dbManager.getStudentById(payment.student_id);
 
   res.json({ success: true, studentId: payment.student_id, student });
 });
 
 // Directly check payment status inside server (Safe callback verification)
-app.get('/api/payments/verify', async (req, res) => {
+app.get('/api/payments/verify', (req, res) => {
   const transactionId = req.query.transactionId as string;
   if (!transactionId) {
     res.status(400).json({ error: 'كود العملية مطلوب للتحقق' });
     return;
   }
 
-  const payment = await dbManager.getPaymentByTransactionId(transactionId);
+  const payment = dbManager.getPaymentByTransactionId(transactionId);
   if (!payment) {
     res.status(404).json({ error: 'العملية غير مسجلة' });
     return;
@@ -287,41 +307,58 @@ app.get('/api/payments/verify', async (req, res) => {
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
-    res.status(400).json({ error: 'الرجاء إدخال اسم المستخدم وكلمة المرور' });
+    res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
     return;
   }
-  const adminUser = await dbManager.getAdminByUsername(username);
-  if (adminUser && adminUser.password === password) {
-    const sessionToken = crypto.randomBytes(32).toString('hex');
-    ADMIN_SESSIONS.set(sessionToken, adminUser.username);
-    res.json({ success: true, token: sessionToken, username: adminUser.username });
-  } else {
-    res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+
+  try {
+    const adminDocRef = doc(db, 'admins', username.trim());
+    const adminDoc = await getDoc(adminDocRef);
+
+    if (!adminDoc.exists()) {
+      res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+      return;
+    }
+
+    const adminData = adminDoc.data();
+    const isMatch = await bcrypt.compare(password, adminData.passwordHash);
+
+    if (!isMatch) {
+      res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+      return;
+    }
+
+    // Generate stateless secure JWT token
+    const token = jwt.sign(
+      { username: adminData.username, role: adminData.role || 'admin' },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({ success: true, token, username: adminData.username });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'حدث خطأ في السيرفر أثناء تسجيل الدخول' });
   }
 });
 
 // Admin verification check
 app.get('/api/admin/me', verifyAdmin, (req, res) => {
-  res.json({ authenticated: true, username: (req as any).adminUsername || 'admin' });
+  res.json({ authenticated: true, username: (req as any).admin?.username || 'admin' });
 });
 
 // Logout Route
 app.post('/api/admin/logout', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    ADMIN_SESSIONS.delete(token);
-  }
   res.json({ success: true });
 });
 
 // Get Gateway Config
-app.get('/api/admin/gateway-config', verifyAdmin, async (req, res) => {
-  res.json({ gatewayConfig: await dbManager.getGatewayConfig() });
+app.get('/api/admin/gateway-config', verifyAdmin, (req, res) => {
+  res.json({ gatewayConfig: dbManager.getGatewayConfig() });
 });
 
 // Update Gateway Config
-app.post('/api/admin/gateway-config', verifyAdmin, async (req, res) => {
+app.post('/api/admin/gateway-config', verifyAdmin, (req, res) => {
   const { merchantId, apiKey, apiSecret, mode } = req.body;
   if (!merchantId || !apiKey || !apiSecret || !mode) {
     res.status(400).json({ error: 'الرجاء ملء جميع حقول التكوين المطلوبة' });
@@ -331,14 +368,14 @@ app.post('/api/admin/gateway-config', verifyAdmin, async (req, res) => {
     res.status(400).json({ error: 'وضع البوابة غير صالح' });
     return;
   }
-  const updated = await dbManager.updateGatewayConfig({ merchantId, apiKey, apiSecret, mode });
+  const updated = dbManager.updateGatewayConfig({ merchantId, apiKey, apiSecret, mode });
   res.json({ success: true, gatewayConfig: updated });
 });
 
 // Statistics Endpoint
-app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
-  const students = await dbManager.getStudents();
-  const payments = await dbManager.getPayments();
+app.get('/api/admin/stats', verifyAdmin, (req, res) => {
+  const students = dbManager.getStudents();
+  const payments = dbManager.getPayments();
 
   const totalStudents = students.length;
   const paidStudents = students.filter(s => s.is_paid).length;
@@ -362,11 +399,11 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
 });
 
 // Student Management CRUD
-app.get('/api/admin/students', verifyAdmin, async (req, res) => {
-  res.json({ students: await dbManager.getStudents() });
+app.get('/api/admin/students', verifyAdmin, (req, res) => {
+  res.json({ students: dbManager.getStudents() });
 });
 
-app.post('/api/admin/students', verifyAdmin, async (req, res) => {
+app.post('/api/admin/students', verifyAdmin, (req, res) => {
   const { seat_number, national_id, full_name, grade, percentage, school_name, school_year, price, subject_grades } = req.body;
   
   if (!seat_number || !national_id || !full_name || !grade || percentage === undefined || !school_name || !school_year || price === undefined) {
@@ -375,7 +412,7 @@ app.post('/api/admin/students', verifyAdmin, async (req, res) => {
   }
 
   // Check unique seat_number and national_id
-  const students = await dbManager.getStudents();
+  const students = dbManager.getStudents();
   if (students.some(s => s.seat_number === seat_number)) {
     res.status(400).json({ error: 'رقم الجلوس هذا مسجل بالفعل لطالب آخر' });
     return;
@@ -385,7 +422,7 @@ app.post('/api/admin/students', verifyAdmin, async (req, res) => {
     return;
   }
 
-  const newStudent = await dbManager.addStudent({
+  const newStudent = dbManager.addStudent({
     seat_number,
     national_id,
     full_name,
@@ -401,7 +438,7 @@ app.post('/api/admin/students', verifyAdmin, async (req, res) => {
   res.status(212).json({ success: true, student: newStudent });
 });
 
-app.put('/api/admin/students/:id', verifyAdmin, async (req, res) => {
+app.put('/api/admin/students/:id', verifyAdmin, (req, res) => {
   const { id } = req.params;
   const updates = req.body;
 
@@ -412,7 +449,7 @@ app.put('/api/admin/students/:id', verifyAdmin, async (req, res) => {
   if (updates.percentage !== undefined) updates.percentage = Number(updates.percentage);
   if (updates.price !== undefined) updates.price = Number(updates.price);
 
-  const updated = await dbManager.updateStudent(id, updates);
+  const updated = dbManager.updateStudent(id, updates);
   if (!updated) {
     res.status(404).json({ error: 'الطالب غير موجود' });
     return;
@@ -421,9 +458,9 @@ app.put('/api/admin/students/:id', verifyAdmin, async (req, res) => {
   res.json({ success: true, student: updated });
 });
 
-app.delete('/api/admin/students/:id', verifyAdmin, async (req, res) => {
+app.delete('/api/admin/students/:id', verifyAdmin, (req, res) => {
   const { id } = req.params;
-  const deleted = await dbManager.deleteStudent(id);
+  const deleted = dbManager.deleteStudent(id);
   if (!deleted) {
     res.status(404).json({ error: 'الطالب غير موجود' });
     return;
@@ -432,9 +469,9 @@ app.delete('/api/admin/students/:id', verifyAdmin, async (req, res) => {
 });
 
 // Re-issue student certificate (resets payment or changes cert hash for security validation)
-app.post('/api/admin/students/:id/reissue', verifyAdmin, async (req, res) => {
+app.post('/api/admin/students/:id/reissue', verifyAdmin, (req, res) => {
   const { id } = req.params;
-  const student = await dbManager.getStudentById(id);
+  const student = dbManager.getStudentById(id);
   if (!student) {
     res.status(404).json({ error: 'الطالب غير موجود' });
     return;
@@ -445,7 +482,7 @@ app.post('/api/admin/students/:id/reissue', verifyAdmin, async (req, res) => {
     .update(`${student.seat_number}-${student.full_name}-${Date.now()}`)
     .digest('hex').substring(0, 10).toUpperCase();
 
-  const updated = await dbManager.updateStudent(id, {
+  const updated = dbManager.updateStudent(id, {
     certificate_hash: freshHash
   });
 
@@ -453,9 +490,9 @@ app.post('/api/admin/students/:id/reissue', verifyAdmin, async (req, res) => {
 });
 
 // Payments List
-app.get('/api/admin/payments', verifyAdmin, async (req, res) => {
-  const payments = await dbManager.getPayments();
-  const students = await dbManager.getStudents();
+app.get('/api/admin/payments', verifyAdmin, (req, res) => {
+  const payments = dbManager.getPayments();
+  const students = dbManager.getStudents();
 
   // Map student name to payments for easy admin viewing
   const enrichedPayments = payments.map(p => {
@@ -475,8 +512,8 @@ app.get('/api/admin/payments', verifyAdmin, async (req, res) => {
 // ==========================================
 
 async function startServer() {
-  // Seed database first on startup
-  await seedDatabaseIfEmpty();
+  // Ensure default admin account is seeded in Firestore
+  await autoSeedAdminIfNeeded();
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

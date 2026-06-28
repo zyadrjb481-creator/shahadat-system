@@ -1,0 +1,24 @@
+# Netlify Configuration File
+# This file configures the build and routing behavior for Netlify.
+
+[build]
+  # For Netlify, we only need to compile the static React SPA files.
+  # This avoids building the Express server bundle which isn't used by Netlify hosting.
+  command = "npx vite build"
+  publish = "dist"
+
+# Proxy API requests to your deployed backend Express server
+# (e.g., hosted on Render, Railway, Koyeb, or your own VPS).
+# Replace the placeholder URL with your actual backend URL once deployed.
+[[redirects]]
+  from = "/api/*"
+  to = "https://your-backend-api-server.com/api/:splat"
+  status = 200
+  force = true
+
+# SPA Routing: Redirect all other requests to index.html
+# This prevents 404 errors when users refresh or directly access sub-routes (like verification links).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

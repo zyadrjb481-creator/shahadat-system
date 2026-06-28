@@ -1,0 +1,84 @@
+{
+  "students": [
+    {
+      "id": "student-1",
+      "seat_number": "1001",
+      "national_id": "30501011234567",
+      "full_name": "أحمد محمد علي حسن",
+      "grade": "ممتاز",
+      "percentage": 95.5,
+      "school_name": "مدرسة المتفوقين الثانوية للبنين",
+      "school_year": "2025 - 2026",
+      "price": 150,
+      "is_paid": false,
+      "subject_grades": {
+        "الرياضيات البحوتة": 59,
+        "الفيزياء": 58,
+        "الكيمياء": 57,
+        "اللغة العربية": 76,
+        "اللغة الإنجليزية": 48,
+        "الجيولوجيا": 59
+      },
+      "certificate_hash": "CERT-14CA55FD"
+    },
+    {
+      "id": "student-2",
+      "seat_number": "1002",
+      "national_id": "30602021234568",
+      "full_name": "سارة عبد الرحمن محمود حسن",
+      "grade": "جيد جداً",
+      "percentage": 88.2,
+      "school_name": "مدرسة الحرية الثانوية الرسمية للغات",
+      "school_year": "2025 - 2026",
+      "price": 150,
+      "is_paid": true,
+      "subject_grades": {
+        "الرياضيات البحوتة": 52,
+        "الفيزياء": 51,
+        "الكيمياء": 50,
+        "اللغة العربية": 72,
+        "اللغة الإنجليزية": 45,
+        "الأحياء": 57
+      },
+      "certificate_hash": "CERT-295F4D4D"
+    },
+    {
+      "id": "student-3",
+      "seat_number": "1003",
+      "national_id": "30503031234569",
+      "full_name": "عمر خالد وليد سعيد",
+      "grade": "مقبول",
+      "percentage": 64.8,
+      "school_name": "مدرسة الأمل الثانوية العسكرية بنين",
+      "school_year": "2025 - 2026",
+      "price": 0,
+      "is_paid": true,
+      "subject_grades": {
+        "الرياضيات البحوتة": 35,
+        "الفيزياء": 38,
+        "الكيمياء": 40,
+        "اللغة العربية": 52,
+        "اللغة الإنجليزية": 30,
+        "التاريخ": 42
+      },
+      "certificate_hash": "CERT-E6BC9FF"
+    }
+  ],
+  "payments": [
+    {
+      "id": "pay-1",
+      "student_id": "student-2",
+      "amount": 150,
+      "transaction_id": "TXN-KASHIER-882910",
+      "status": "success",
+      "payment_method": "credit_card",
+      "created_at": "2026-06-26T11:14:47.756Z"
+    }
+  ],
+  "gatewayConfig": {
+    "merchantId": "8e688370b0ecea73ff706a8aac9e3843",
+    "apiKey": "55ea9130-fb8a-4d9e-953a-285b680b85e1",
+    "apiSecret": "8bba4e7259e71f70abb2ce6f5977418616f186fecb9861f552cd49e38d302d8d13543bdc1a8f0c0e5b3a7bf0e0c9a68b",
+    "mode": "sandbox"
+  }
+}
